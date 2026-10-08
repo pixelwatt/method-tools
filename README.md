@@ -6,7 +6,7 @@ Included tools:
 
 - **Accordion Converter** — converts `core/accordion` blocks to `method/accordion` blocks, or the reverse.
 
-Requirements: WordPress 6.0+, PHP 7.4+, and the `manage_options` capability (you can change this with the `method_tools_capability` filter). Tested on WordPress 6.0.17 (MariaDB), 6.8.3 and 7.1.3, with Method 2.0.0-beta27.
+Requirements: WordPress 6.0+, PHP 7.4+, and the `manage_options` capability (you can change this with the `method_tools_capability` filter). Tested on WordPress 6.0.17 (MariaDB), 6.8.3 and 7.1.3, with Method 2.0.0-beta27 and beta28.
 
 ## Install
 
@@ -50,7 +50,7 @@ wp method-tools discard <run-id>
 
 Output is the exact markup each block's `save()` produces:
 
-- **Method blocks:** the markup Method beta27 saves.
+- **Method blocks:** the markup the installed Method saves. The item's panel `id` changed in beta28, from `collapse{n}` to `accordion-{accordionId}-collapse-{n}`. The converter writes the beta28 format when Method's `method_accordion_collapse_id()` helper exists. Otherwise (Method beta27 or older, or Method not loaded) it writes the old format, because beta27's editor rejects the new one. beta28 still accepts the old format through its deprecation and renders unique ids for it. Override with the `method_tools_accordion_panel_ids` filter (`'scoped'` or `'legacy'`).
 - **Core blocks:** the markup WordPress 6.9 and 7.0 save. WordPress 7.1+ lists this markup as a deprecation and upgrades it silently the next time the post is saved.
 
 Converted markup was validated with Gutenberg's own block validator for WordPress 6.9, 7.0 and trunk, and with Method's compiled block scripts (`tests/gutenberg-harness.cjs`).
@@ -72,10 +72,10 @@ Converted markup was validated with Gutenberg's own block validator for WordPres
   - Restores only write backups whose HMAC signature, keyed with the site's auth salts, proves this plugin created them.
 - **Page templates.** A stale `_wp_page_template` left over from a previous theme no longer blocks or half-completes a save. The stored template is left untouched.
 
-### Known Method behaviour to check after converting
+### Method versions before 2.0.0-beta28
 
-- **Duplicate panel IDs.** Method numbers panel IDs `collapse1`, `collapse2`, … within each accordion, so two Method accordions on one page share IDs. The second accordion's toggles then open the first accordion's panels. The converter flags every post that ends up with more than one Method accordion.
-- **PHP notice from `"type": "bool"`.** `method/accordion` and `method/accordion-item` declare `closed` as `"type": "bool"`. When `closed` is set, WordPress logs a `rest_validate_value_from_schema` notice on render with `WP_DEBUG` on. Core accordions default to all items closed, so converted accordions usually set `closed`. Changing the type to `"boolean"` in both `block.json` files fixes it, and doesn't affect saved markup.
+- **Duplicate panel IDs.** Before beta28, every accordion numbers its panels `collapse1`, `collapse2`, …, so a page with two accordions has two of each. The second accordion's toggles then open the first accordion's panels. On those versions the tool shows a notice, and the converter flags every post that ends up with more than one Method accordion. beta28 fixes this at render time, including for content saved earlier.
+- **PHP notice from `"type": "bool"`.** `closed` was declared `"type": "bool"`, which logs a `rest_validate_value_from_schema` notice under `WP_DEBUG`. Converted accordions usually set `closed`. Fixed in beta28.
 
 ## Adding a tool
 
@@ -116,6 +116,7 @@ Filters:
 | `method_tools_post_types` / `method_tools_post_statuses` | Targetable post types and statuses. |
 | `method_tools_method_theme_slug` | Theme slug used to detect Method. Default `method`. |
 | `method_tools_accordion_method_headline_tags` / `method_tools_accordion_core_title_tags` | `wp_kses` allow-lists for converted headings. |
+| `method_tools_accordion_panel_ids` | Method panel id format to write: `'scoped'` (beta28+) or `'legacy'`. Detected by default. |
 
 ## Data and uninstall
 
@@ -133,4 +134,4 @@ The tests live in `tests/` and are excluded from release archives.
 - `pipeline.php` creates and deletes its own posts. Run it only on a disposable local site.
 - `gutenberg-harness.cjs` validates converted markup with the real `@wordpress/blocks` and `@wordpress/block-library` for a pinned WordPress release, together with Method's compiled block scripts. Setup instructions are in its header.
 
-The fixtures are core accordion markup produced by Gutenberg 6.9's own serializer.
+The fixtures are core accordion markup produced by Gutenberg 6.9's own serializer, plus Method accordion markup produced by Method's compiled beta27 and beta28 blocks.

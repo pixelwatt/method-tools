@@ -95,7 +95,8 @@ ok( 200 === $status, 'candidates 200' );
 $expect = array( $ids['page_group'], $ids['post_basic'], $ids['pattern'], $ids['draft_styled'], $ids['private_nest'], $ids['event'], $ids['tpl_part'] );
 sort( $expect );
 ok( $data['ids'] === $expect, 'candidates = expected set: ' . wp_json_encode( $data['ids'] ) . ' vs ' . wp_json_encode( $expect ) );
-ok( WP_Block_Type_Registry::get_instance()->is_registered( 'method/accordion' ) ? empty( $data['notices'] ) : ! empty( $data['notices'] ), 'env notice for c2m iff Method missing' );
+$method_current = WP_Block_Type_Registry::get_instance()->is_registered( 'method/accordion' ) && function_exists( 'method_accordion_collapse_id' );
+ok( $method_current ? empty( $data['notices'] ) : ! empty( $data['notices'] ), 'env notice for c2m iff Method missing or older than beta28' );
 
 // Criteria narrowing.
 list( , $d2 ) = rest( 'POST', '/tools/accordion-converter/candidates', array( 'options' => $opts, 'criteria' => array( 'include' => $mine, 'post_types' => array( 'page' ), 'statuses' => array( 'publish', 'draft' ), 'exclude' => (string) $ids['draft_styled'] ) ) );
@@ -167,6 +168,8 @@ $html = apply_filters( 'the_content', $post->post_content );
 ok( false !== strpos( $html, 'class="accordion-button' ) && false !== strpos( $html, 'method-accordion' ), 'front end renders Method accordion' );
 ok( false !== strpos( $html, '<h3 class="accordion-header">' ), 'front end uses h3 (from core default level)' );
 ok( false !== strpos( $html, 'In group' ), 'front end has headline text' );
+preg_match_all( '/<div[^>]*class="[^"]*accordion-collapse[^"]*"[^>]*\sid="([^"]+)"/', $html, $panel_ids );
+ok( 2 === count( $panel_ids[1] ) && 2 === count( array_unique( $panel_ids[1] ) ) || ! function_exists( 'method_accordion_collapse_id' ), 'front end: panel ids unique across the two accordions (beta28+): ' . wp_json_encode( $panel_ids[1] ) );
 wp_reset_postdata();
 endif;
 

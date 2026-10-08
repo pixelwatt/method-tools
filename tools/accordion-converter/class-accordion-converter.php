@@ -13,6 +13,10 @@
  *   deprecation and migrate it silently in the editor.
  * - Method: the save() of Method's accordion, item and body blocks (static
  *   wrappers around inner blocks; the PHP render callbacks add the rest).
+ *   The item's panel id comes in two formats: `collapse{n}` up to
+ *   2.0.0-beta27, `accordion-{accordionId}-collapse-{n}` from beta28 (which
+ *   keeps the old save as a deprecation and rewrites old ids at render).
+ *   PANEL_IDS_* picks which one is written; see installed_panel_ids().
  *
  * Only accordion blocks are rebuilt. Panel/body content is copied verbatim
  * from the source string (nested accordions inside it are converted the same
@@ -54,6 +58,12 @@ final class Accordion_Converter {
 		self::METHOD_BODY,
 	);
 
+	/** Panel ids scoped to their accordion (Method 2.0.0-beta28+). */
+	const PANEL_IDS_SCOPED = 'scoped';
+
+	/** Panel ids `collapse{n}`, repeated across accordions (Method ≤ 2.0.0-beta27). */
+	const PANEL_IDS_LEGACY = 'legacy';
+
 	/** Attributes every block type accepts; carried across when present. */
 	const UNIVERSAL_ATTRS = array( 'lock', 'metadata' );
 
@@ -62,6 +72,9 @@ final class Accordion_Converter {
 
 	/** @var callable Returns a new accordionId. */
 	private $id_factory;
+
+	/** @var string PANEL_IDS_SCOPED or PANEL_IDS_LEGACY. */
+	private $panel_ids;
 
 	/** @var string Source being converted. */
 	private $source = '';
@@ -75,10 +88,31 @@ final class Accordion_Converter {
 	/**
 	 * @param string        $direction  CORE_TO_METHOD or METHOD_TO_CORE.
 	 * @param callable|null $id_factory Generates Method accordion IDs (tests pass a deterministic one).
+	 * @param string|null   $panel_ids  PANEL_IDS_SCOPED or PANEL_IDS_LEGACY; null = installed_panel_ids().
 	 */
-	public function __construct( $direction, $id_factory = null ) {
+	public function __construct( $direction, $id_factory = null, $panel_ids = null ) {
 		$this->direction  = self::METHOD_TO_CORE === $direction ? self::METHOD_TO_CORE : self::CORE_TO_METHOD;
 		$this->id_factory = $id_factory ? $id_factory : 'wp_generate_uuid4';
+		$this->panel_ids  = null === $panel_ids ? self::installed_panel_ids() : ( self::PANEL_IDS_LEGACY === $panel_ids ? self::PANEL_IDS_LEGACY : self::PANEL_IDS_SCOPED );
+	}
+
+	/**
+	 * Panel id format the installed Method saves.
+	 *
+	 * Detected by Method's own PHP helper, added in 2.0.0-beta28 alongside the
+	 * new save. When it's missing (Method ≤ beta27, or Method not loaded) the
+	 * legacy format is written: valid in beta27's editor, and in beta28+ it
+	 * still validates through Method's deprecation and renders with scoped ids.
+	 * The scoped format, by contrast, is invalid markup to beta27's editor.
+	 *
+	 * Filter: method_tools_accordion_panel_ids ('scoped' | 'legacy').
+	 *
+	 * @return string
+	 */
+	public static function installed_panel_ids() {
+		$format = function_exists( 'method_accordion_collapse_id' ) ? self::PANEL_IDS_SCOPED : self::PANEL_IDS_LEGACY;
+		$format = function_exists( 'apply_filters' ) ? apply_filters( 'method_tools_accordion_panel_ids', $format ) : $format;
+		return self::PANEL_IDS_LEGACY === $format ? self::PANEL_IDS_LEGACY : self::PANEL_IDS_SCOPED;
 	}
 
 	/**
@@ -128,11 +162,13 @@ final class Accordion_Converter {
 		$this->result->content = $converted;
 		$this->result->changed = true;
 
-		if ( self::CORE_TO_METHOD === $this->direction && $after->count( self::METHOD_ACCORDION ) > 1 ) {
+		// Only a problem before beta28: from beta28 the render scopes every
+		// panel id, including ones saved in the legacy format.
+		if ( self::CORE_TO_METHOD === $this->direction && self::PANEL_IDS_LEGACY === $this->panel_ids && $after->count( self::METHOD_ACCORDION ) > 1 ) {
 			$this->result->add(
 				Transform_Result::WARNING,
 				sprintf(
-					'This post now has %d Method accordions. Method gives item panels the IDs collapse1, collapse2, … per accordion, so on one page the toggles of a later accordion open the matching panel of the first. Check this page on the front end.',
+					'This post now has %d Method accordions. Method before 2.0.0-beta28 gives item panels the IDs collapse1, collapse2, … in every accordion, so the toggles of a later accordion open the matching panel of the first. Update Method (beta28 fixes this at render, no re-save needed) or check this page on the front end.',
 					$after->count( self::METHOD_ACCORDION )
 				)
 			);
@@ -353,7 +389,7 @@ final class Accordion_Converter {
 			$items[] = Block_Markup::block(
 				self::METHOD_ITEM,
 				$item_attrs,
-				'<div class="' . esc_attr( Block_Markup::classes( array( 'accordion-collapse', 'collapse', 1 === $n && ! $closed ? 'show' : '' ) ) ) . '" id="collapse' . $n . '" data-bs-parent="#accordion-' . esc_attr( $id ) . '">' . $body . '</div>'
+				'<div class="' . esc_attr( Block_Markup::classes( array( 'accordion-collapse', 'collapse', 1 === $n && ! $closed ? 'show' : '' ) ) ) . '" id="' . esc_attr( $this->panel_id( $id, $n ) ) . '" data-bs-parent="#accordion-' . esc_attr( $id ) . '">' . $body . '</div>'
 			);
 
 			$this->result->bump( 'items' );
@@ -511,6 +547,20 @@ final class Accordion_Converter {
 	// ---------------------------------------------------------------------
 	// Helpers
 	// ---------------------------------------------------------------------
+
+	/**
+	 * Id of a Method item's panel, as that Method version's save() writes it
+	 * (getAccordionCollapseId() in Method's lib/blocks/utils/accordionId.js).
+	 *
+	 * @param string $accordion_id Accordion's accordionId.
+	 * @param int    $n            1-based item index.
+	 * @return string
+	 */
+	private function panel_id( $accordion_id, $n ) {
+		return self::PANEL_IDS_LEGACY === $this->panel_ids
+			? 'collapse' . (int) $n
+			: 'accordion-' . $accordion_id . '-collapse-' . (int) $n;
+	}
 
 	/**
 	 * Why an accordion can't be converted safely, or '' if it can.

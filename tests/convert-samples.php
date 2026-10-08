@@ -44,17 +44,21 @@ foreach ( $samples as $name => $content ) {
 		$report[ 'm2c.' . $name ]  = array( 'changed' => $r->changed, 'counts' => $r->counts, 'messages' => $r->messages );
 		check( $r->changed, "m2c $name changed" );
 
-		$back = ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids ) )->convert( $r->content );
+		$back = ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids, Accordion_Converter::PANEL_IDS_SCOPED ) )->convert( $r->content );
 		$results[ 'rt.' . $name ] = $back->content;
 		continue;
 	}
 
-	$r = ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids ) )->convert( $content );
+	// Method ≤ beta27 panel ids (validated against beta27, and beta28's deprecation).
+	$legacy = ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids, Accordion_Converter::PANEL_IDS_LEGACY ) )->convert( $content );
+	$results[ 'c2mL.' . $name ] = $legacy->content;
+
+	$r = ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids, Accordion_Converter::PANEL_IDS_SCOPED ) )->convert( $content );
 	$results[ 'c2m.' . $name ] = $r->content;
 	$report[ 'c2m.' . $name ]  = array( 'changed' => $r->changed, 'counts' => $r->counts, 'messages' => $r->messages );
 
 	// Idempotent: converting the result again changes nothing.
-	$again = ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids ) )->convert( $r->content );
+	$again = ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids, Accordion_Converter::PANEL_IDS_SCOPED ) )->convert( $r->content );
 	check( ! $again->changed, "c2m $name idempotent" );
 
 	// Nothing core-accordion left (unless intentionally skipped).

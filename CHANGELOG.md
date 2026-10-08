@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 — 2026-10-08
+
+- Accordion Converter writes Method 2.0.0-beta28's scoped panel ids (`accordion-{accordionId}-collapse-{n}`) when the installed Method provides `method_accordion_collapse_id()`. On older Method versions it keeps writing `collapse{n}`, which beta27's editor requires. New filter: `method_tools_accordion_panel_ids`.
+- The "more than one Method accordion on this post" warning only appears on Method versions before beta28. On those versions the tool also shows a notice suggesting the update.
+- Tests: beta28 fixtures, both panel-id formats validated against Method beta27 and beta28 blocks.
+
 ## 0.1.0 — 2026-10-06
 
 - Initial release.

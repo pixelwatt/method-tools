@@ -78,6 +78,15 @@ final class Accordion_Converter_Tool extends Post_Tool {
 				'level' => Transform_Result::WARNING,
 				'text'  => __( 'The method/accordion block isn\'t registered on this site (is Method the active theme or its parent?). Converted accordions won\'t render or be editable until it is.', 'method-tools' ),
 			);
+		} elseif ( Accordion_Converter::PANEL_IDS_LEGACY === Accordion_Converter::installed_panel_ids() ) {
+			$notices[] = array(
+				'level' => Transform_Result::WARNING,
+				'text'  => sprintf(
+					/* translators: %s: Method version */
+					__( 'Method %s predates 2.0.0-beta28, so converted accordions are saved with its collapse1, collapse2, … panel IDs, which repeat when a page has more than one accordion. Updating Method fixes those IDs at render without re-saving; the editor upgrades the markup on the next save.', 'method-tools' ),
+					Environment::method_version() ? Environment::method_version() : '(unknown version)'
+				),
+			);
 		}
 		return $notices;
 	}

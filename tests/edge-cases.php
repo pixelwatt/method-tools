@@ -26,8 +26,8 @@ $ids = function () use ( &$n ) {
 	$n++;
 	return sprintf( '00000000-0000-4000-8000-%012d', $n );
 };
-$c2m = function ( $s ) use ( $ids ) {
-	return ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids ) )->convert( $s );
+$c2m = function ( $s, $panel_ids = Accordion_Converter::PANEL_IDS_SCOPED ) use ( $ids ) {
+	return ( new Accordion_Converter( Accordion_Converter::CORE_TO_METHOD, $ids, $panel_ids ) )->convert( $s );
 };
 $m2c = function ( $s ) use ( $ids ) {
 	return ( new Accordion_Converter( Accordion_Converter::METHOD_TO_CORE, $ids ) )->convert( $s );
@@ -129,6 +129,33 @@ t( $r->changed && false === strpos( $r->content, 'is-open' ), 'm2c: closed "true
 $mixed = preg_replace( '/<!-- wp:accordion-heading \{"level":3\} -->\n<h3 (.*?)<\/h3>/s', "<!-- wp:accordion-heading {\"level\":4} -->\n<h4 $1</h4>", $acc, 1 );
 $r     = $c2m( $mixed );
 t( $r->changed && false !== strpos( $msgs( $r ), 'different heading levels (h4, h3)' ) && false !== strpos( $r->content, '"hTag":"h4"' ), 'mixed levels: first level used, warned' );
+
+// Panel ids: Method beta28+ scopes them per accordion; ≤ beta27 used collapse{n}.
+$n = 0;
+$r = $c2m( $samples['in_group_with_siblings'] );
+t( false !== strpos( $r->content, 'id="accordion-00000000-0000-4000-8000-000000000001-collapse-1" data-bs-parent="#accordion-00000000-0000-4000-8000-000000000001"' )
+	&& false !== strpos( $r->content, 'id="accordion-00000000-0000-4000-8000-000000000002-collapse-1"' )
+	&& false === strpos( $r->content, 'id="collapse1"' ), 'panel ids: scoped format, unique across accordions' );
+t( false === strpos( $msgs( $r ), 'Method accordions' ), 'panel ids: no duplicate-id warning in scoped mode' );
+$r = $c2m( $samples['in_group_with_siblings'], Accordion_Converter::PANEL_IDS_LEGACY );
+t( 2 === substr_count( $r->content, 'id="collapse1"' ) && false !== strpos( $msgs( $r ), 'before 2.0.0-beta28' ), 'panel ids: legacy format + warning when a post has 2 accordions' );
+$filter = function () {
+	return Accordion_Converter::PANEL_IDS_LEGACY;
+};
+add_filter( 'method_tools_accordion_panel_ids', $filter );
+t( Accordion_Converter::PANEL_IDS_LEGACY === Accordion_Converter::installed_panel_ids(), 'panel ids: filter override' );
+remove_filter( 'method_tools_accordion_panel_ids', $filter );
+t( ( function_exists( 'method_accordion_collapse_id' ) ? Accordion_Converter::PANEL_IDS_SCOPED : Accordion_Converter::PANEL_IDS_LEGACY ) === Accordion_Converter::installed_panel_ids(), 'panel ids: detected from Method\'s helper' );
+if ( function_exists( 'method_accordion_collapse_id' ) ) {
+	$out = $c2m( $acc )->content;
+	preg_match( '/"accordionId":"([^"]+)"/', $out, $acc_id );
+	t( false !== strpos( $out, 'id="' . method_accordion_collapse_id( $acc_id[1], 2 ) . '" data-bs-parent="#' . method_accordion_element_id( $acc_id[1] ) . '"' ), 'panel ids: match Method\'s own helpers' );
+}
+
+// Method -> core reads both Method formats identically.
+$m27 = ( new Accordion_Converter( Accordion_Converter::METHOD_TO_CORE, $ids ) )->convert( $samples['method_basic'] );
+$m28 = ( new Accordion_Converter( Accordion_Converter::METHOD_TO_CORE, $ids ) )->convert( $samples['method_b28_basic'] );
+t( $m27->changed && $m28->changed && $m27->content === $m28->content, 'm2c: beta27 and beta28 Method markup convert to the same core markup' );
 
 // 9. Helpers.
 t( 'a <b>b</b> c' === Block_Markup::inner_html_by_class( '<p><span class="x y">a <b>b</b> c</span><span class="z">q</span></p>', 'y' ), 'helper: inner_html_by_class' );
